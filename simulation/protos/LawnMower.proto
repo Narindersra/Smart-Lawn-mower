@@ -35,9 +35,12 @@ PROTO LawnMower [
           axis 0 1 0
         }
         device [
-          RotationalMotor {
-            name "left_wheel_motor"
-          }
+            RotationalMotor {
+              name "left_wheel_motor"
+            }
+            PositionSensor {
+              name "left_wheel_encoder"
+            }
         ]
         endPoint Solid {
           name "left_wheel"
@@ -62,6 +65,9 @@ PROTO LawnMower [
         device [
           RotationalMotor {
             name "right_wheel_motor"
+          }
+          PositionSensor {
+            name "right_wheel_encoder"
           }
         ]
         endPoint Solid {
@@ -102,6 +108,14 @@ PROTO LawnMower [
         name "camera"
         width 640
         height 480
+      }
+      InertialUnit {
+        translation 0 0 0.12
+        name "imu"
+      }
+      GPS {
+        translation 0 0 0.12
+        name "gps"
       }
     ]
     # Physics Collision Box

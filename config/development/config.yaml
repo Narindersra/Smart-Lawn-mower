@@ -1,0 +1,12 @@
+safety:
+  ai_stop_classes:
+    - person
+    - dog
+    - cat
+  obstacle_distance_threshold: 500.0
+  ai_confidence_threshold: 0.60
+
+localization:
+  gps_origin:
+    x: 0.0
+    y: 0.0
