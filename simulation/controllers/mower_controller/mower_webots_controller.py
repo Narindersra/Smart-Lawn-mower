@@ -6,6 +6,11 @@ from raspberry_pi.src.localization import localization_manager, odometry
 from raspberry_pi.src.safety import safety_manager
 from safety_manager import SafetyManager
 from localization.localization_manager import LocalizationManager
+from navigation.planner import NavigationPlanner
+from navigation.navigation_types import NavigationState, Waypoint
+from navigation.differential_drive import DifferentialDriveController
+from navigation.obstacle_avoidance import ObstacleAvoidance
+from navigation.obstacle_types import Obstacle, ObstacleInformation
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -110,6 +115,24 @@ def run_simulation():
         timestep=timestep,
     )
 
+    navigation_planner = NavigationPlanner(
+        waypoint_tolerance=0.15,
+    )
+
+    drive_controller = DifferentialDriveController(
+        wheel_radius=0.08,
+        wheel_track=0.44,
+    )
+
+    obstacle_avoidance = ObstacleAvoidance()
+
+    navigation_planner.set_waypoint(
+        Waypoint(
+            x=5.0,
+            y=5.0,
+        )
+    )
+
     # --------------------------------------------------
     # Main Simulation Loop
     # --------------------------------------------------
@@ -117,7 +140,32 @@ def run_simulation():
 
         # Read front distance sensor
         distance = ds_front.getValue()
+        obstacle_information = ObstacleInformation(
+            obstacles=(
+                Obstacle(
+                    x=distance,
+                    y=0.0,
+                    distance=distance,
+                ),
+            )
+            if obstacle_detected
+            else ()
+        )
         obstacle_detected = safety_manager.should_stop_for_obstacle(distance)
+        if obstacle_detected:
+            navigation_planner.transition_to(
+                NavigationState.AVOIDING
+            )
+
+        if (
+            navigation_planner.state == NavigationState.AVOIDING
+            and obstacle_avoidance.is_clear(obstacle_information)
+        ):
+            navigation_planner.transition_to(
+                NavigationState.REPLANNING
+            )
+        if navigation_planner.state == NavigationState.REPLANNING:
+            navigation_planner.replan(pose)
 
         # Read wheel encoder positions
         left_encoder_position = left_encoder.getValue()
@@ -129,15 +177,35 @@ def run_simulation():
         )
 
 
-       
-     
-
         pose = localization_manager.update(
             left_encoder_position=left_encoder_position,
             right_encoder_position=right_encoder_position,
         )
-
         localization_ready = localization_manager.is_ready()
+
+        navigation_state, distance_to_waypoint, heading_error, motion_command = (
+            navigation_planner.update(pose)
+        )
+
+        left_wheel_velocity, right_wheel_velocity = (
+            drive_controller.calculate_wheel_velocities(
+                linear_velocity=motion_command.linear_velocity,
+                angular_velocity=motion_command.angular_velocity,
+            )
+        )
+
+        avoidance_command = obstacle_avoidance.calculate(
+            obstacle_information
+        )
+
+        avoidance_left_velocity, avoidance_right_velocity = (
+            drive_controller.calculate_wheel_velocities(
+                linear_velocity=avoidance_command.linear_velocity,
+                angular_velocity=avoidance_command.angular_velocity,
+            )
+        )
+
+        
 
         # Camera Frame
         frame = camera_adapter.get_frame()
@@ -157,15 +225,26 @@ def run_simulation():
         if not localization_ready:
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)
+        
         elif ai_safety_stop:
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)
+        
         elif obstacle_detected:
-            left_motor.setVelocity(-2.0)
-            right_motor.setVelocity(2.0)
+            left_motor.setVelocity(avoidance_left_velocity)
+            right_motor.setVelocity(avoidance_right_velocity)
+        
+        elif navigation_state == NavigationState.GOAL_REACHED:
+            left_motor.setVelocity(0.0)
+            right_motor.setVelocity(0.0)
+        
+        elif navigation_state == NavigationState.EMERGENCY_STOP:
+            left_motor.setVelocity(0.0)
+            right_motor.setVelocity(0.0)
+        
         else:
-            left_motor.setVelocity(3.0)
-            right_motor.setVelocity(3.0)
+            left_motor.setVelocity(left_wheel_velocity)
+            right_motor.setVelocity(right_wheel_velocity)
 
 
 if __name__ == "__main__":
