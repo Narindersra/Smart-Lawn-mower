@@ -1,22 +1,27 @@
 import sys
 from pathlib import Path
+
 import yaml
 from controller import Robot
-from raspberry_pi.src.localization import localization_manager, odometry
-from raspberry_pi.src.safety import safety_manager
-from safety_manager import SafetyManager
-from localization.localization_manager import LocalizationManager
-from navigation.planner import NavigationPlanner
-from navigation.navigation_types import NavigationState, Waypoint
-from navigation.differential_drive import DifferentialDriveController
-from navigation.obstacle_avoidance import ObstacleAvoidance
-from navigation.obstacle_types import Obstacle, ObstacleInformation
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-    
+
+
+from localization.localization_manager import LocalizationManager
+
+from navigation.planner import NavigationPlanner
+from navigation.navigation_types import NavigationState, Waypoint
+from navigation.differential_drive import DifferentialDriveController
+from navigation.obstacle_avoidance import ObstacleAvoidance
+from navigation.obstacle_types import Obstacle, ObstacleInformation
+from navigation.geofence import Geofence
+
+from safety.safety_manager import SafetyManager
+
 from webots_camera import WebotsCameraAdapter
 from ai.inference.inference import InferenceEngine
 
@@ -115,8 +120,18 @@ def run_simulation():
         timestep=timestep,
     )
 
+    geofence_config = config["geofence"]
+
+    geofence = Geofence(
+        min_x=geofence_config["min_x"],
+        max_x=geofence_config["max_x"],
+        min_y=geofence_config["min_y"],
+        max_y=geofence_config["max_y"],
+    )
+
     navigation_planner = NavigationPlanner(
         waypoint_tolerance=0.15,
+        geofence=geofence,
     )
 
     drive_controller = DifferentialDriveController(
@@ -139,19 +154,11 @@ def run_simulation():
     while robot.step(timestep) != -1:
 
         # Read front distance sensor
-        distance = ds_front.getValue()
-        obstacle_information = ObstacleInformation(
-            obstacles=(
-                Obstacle(
-                    x=distance,
-                    y=0.0,
-                    distance=distance,
-                ),
-            )
-            if obstacle_detected
-            else ()
-        )
+        distance = ds_front.getValue() / 1000.0
         obstacle_detected = safety_manager.should_stop_for_obstacle(distance)
+        obstacle_information = ObstacleInformation(
+            obstacles=()
+        )
         if obstacle_detected:
             navigation_planner.transition_to(
                 NavigationState.AVOIDING
@@ -164,8 +171,7 @@ def run_simulation():
             navigation_planner.transition_to(
                 NavigationState.REPLANNING
             )
-        if navigation_planner.state == NavigationState.REPLANNING:
-            navigation_planner.replan(pose)
+        
 
         # Read wheel encoder positions
         left_encoder_position = left_encoder.getValue()
@@ -181,6 +187,10 @@ def run_simulation():
             left_encoder_position=left_encoder_position,
             right_encoder_position=right_encoder_position,
         )
+
+        if navigation_planner.state == NavigationState.REPLANNING:
+            navigation_planner.replan(pose)
+
         localization_ready = localization_manager.is_ready()
 
         navigation_state, distance_to_waypoint, heading_error, motion_command = (
