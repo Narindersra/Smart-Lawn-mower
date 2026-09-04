@@ -93,7 +93,7 @@ class NavigationPlanner:
         self.state_machine.transition_to(
             NavigationState.NAVIGATING
         )
-        self.state = self.state_machine.get_state()
+        
 
     def set_path(self, path: Path) -> None:
         """
@@ -113,7 +113,7 @@ class NavigationPlanner:
         self.state_machine.transition_to(
             NavigationState.NAVIGATING
         )
-        self.state = self.state_machine.get_state()
+        
 
     def clear_waypoint(self) -> None:
         """
@@ -126,7 +126,7 @@ class NavigationPlanner:
         self.state_machine.transition_to(
             NavigationState.IDLE
         )
-        self.state = self.state_machine.get_state()
+        
 
     def clear_path(self) -> None:
         """
@@ -138,7 +138,7 @@ class NavigationPlanner:
         self.current_waypoint_index = 0
         self.goal_waypoint = None
         self.state_machine.transition_to(NavigationState.IDLE)
-        self.state = self.state_machine.get_state()
+        
 
     def update(
         self,
@@ -170,7 +170,7 @@ class NavigationPlanner:
             self.state_machine.transition_to(
                 NavigationState.EMERGENCY_STOP
             )
-            self.state = self.state_machine.get_state()
+            
 
             return (
                 self.state,
@@ -192,7 +192,7 @@ class NavigationPlanner:
                 self.state_machine.transition_to(
                     NavigationState.GOAL_REACHED
                 )
-                self.state = self.state_machine.get_state()
+                
 
                 return (
                     self.state,
@@ -212,7 +212,6 @@ class NavigationPlanner:
                 self.state_machine.transition_to(
                     NavigationState.GOAL_REACHED
                 )
-                self.state = self.state_machine.get_state()
 
                 return (
                     self.state,
@@ -262,7 +261,7 @@ class NavigationPlanner:
         self.state_machine.transition_to(
             NavigationState.NAVIGATING
         )
-        self.state = self.state_machine.get_state() 
+         
 
         return (
             self.state,

@@ -25,8 +25,8 @@ class GPSReader:
             x, y, z position in meters.
         """
         x, y, z = self.gps.getValues()
-    
+
         local_x = x - self.origin_x
-        local_y = y - self.origin_y
-    
-        return local_x, local_y, z
+        local_y = z - self.origin_y
+        
+        return local_x, local_y, y

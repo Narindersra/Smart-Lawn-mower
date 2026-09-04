@@ -3,7 +3,7 @@ safety:
     - person
     - dog
     - cat
-  obstacle_distance_threshold: 500.0
+  obstacle_distance_threshold: 0.5
   ai_confidence_threshold: 0.60
 
 localization:
