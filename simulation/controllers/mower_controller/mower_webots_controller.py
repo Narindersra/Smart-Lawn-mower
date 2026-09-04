@@ -16,7 +16,6 @@ from localization.localization_manager import LocalizationManager
 from navigation.planner import NavigationPlanner
 from navigation.navigation_types import NavigationState, Waypoint
 from navigation.differential_drive import DifferentialDriveController
-from navigation.obstacle_avoidance import ObstacleAvoidance
 from navigation.obstacle_types import Obstacle, ObstacleInformation
 from navigation.geofence import Geofence
 
@@ -139,7 +138,7 @@ def run_simulation():
         wheel_track=0.44,
     )
 
-    obstacle_avoidance = ObstacleAvoidance()
+
 
     navigation_planner.set_waypoint(
         Waypoint(
@@ -155,9 +154,15 @@ def run_simulation():
 
         # Read front distance sensor
         distance = ds_front.getValue() / 1000.0
+        
         obstacle_detected = safety_manager.should_stop_for_obstacle(distance)
+
         obstacle_information = ObstacleInformation(
-            obstacles=()
+            obstacles=(
+                Obstacle(distance=distance),
+            )
+            if distance < 0.8
+            else ()
         )
         if obstacle_detected:
             navigation_planner.transition_to(
@@ -177,41 +182,25 @@ def run_simulation():
         left_encoder_position = left_encoder.getValue()
         right_encoder_position = right_encoder.getValue()
 
-        odometry_data = odometry.update(
-            left_encoder_position,
-            right_encoder_position,
-        )
-
 
         pose = localization_manager.update(
             left_encoder_position=left_encoder_position,
             right_encoder_position=right_encoder_position,
         )
 
-        if navigation_planner.state == NavigationState.REPLANNING:
-            navigation_planner.replan(pose)
-
         localization_ready = localization_manager.is_ready()
 
-        navigation_state, distance_to_waypoint, heading_error, motion_command = (
-            navigation_planner.update(pose)
+        navigation_state, distance_to_goal, heading_error, motion_command = (
+            navigation_planner.update(
+                pose,
+                obstacle_information=obstacle_information,
+            )
         )
 
         left_wheel_velocity, right_wheel_velocity = (
             drive_controller.calculate_wheel_velocities(
-                linear_velocity=motion_command.linear_velocity,
-                angular_velocity=motion_command.angular_velocity,
-            )
-        )
-
-        avoidance_command = obstacle_avoidance.calculate(
-            obstacle_information
-        )
-
-        avoidance_left_velocity, avoidance_right_velocity = (
-            drive_controller.calculate_wheel_velocities(
-                linear_velocity=avoidance_command.linear_velocity,
-                angular_velocity=avoidance_command.angular_velocity,
+                motion_command.linear_velocity,
+                motion_command.angular_velocity,
             )
         )
 
@@ -240,9 +229,7 @@ def run_simulation():
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)
         
-        elif obstacle_detected:
-            left_motor.setVelocity(avoidance_left_velocity)
-            right_motor.setVelocity(avoidance_right_velocity)
+        
         
         elif navigation_state == NavigationState.GOAL_REACHED:
             left_motor.setVelocity(0.0)
