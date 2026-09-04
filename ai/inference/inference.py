@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .detector import Detection, ObjectDetector
+from .detecter import Detection, ObjectDetector
 
 
 class InferenceEngine:

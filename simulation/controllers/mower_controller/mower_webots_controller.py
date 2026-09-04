@@ -10,6 +10,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+SRC_ROOT = PROJECT_ROOT / "raspberry_pi" / "src"
+
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
 
 from localization.localization_manager import LocalizationManager
 
@@ -221,7 +226,7 @@ def run_simulation():
         elif obstacle_detected:
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)
-                
+
         elif navigation_state == NavigationState.GOAL_REACHED:
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)
