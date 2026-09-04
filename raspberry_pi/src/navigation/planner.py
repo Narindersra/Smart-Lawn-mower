@@ -181,22 +181,28 @@ class NavigationPlanner:
                 ),
             )
 
-        if self.geofence is not None and not self.geofence.contains(pose):
-            self.state_machine.transition_to(
-                NavigationState.EMERGENCY_STOP
-            )
-            
-
-            return (
-                self.state,
-                0.0,
-                0.0,
-                MotionCommand(
-                    linear_velocity=0.0,
-                    angular_velocity=0.0,
-                ),
-            )
-
+        if self.geofence is not None:
+            if (
+                not self.geofence.contains(pose)
+                or not self.geofence.contains_position(
+                    self.current_waypoint.x,
+                    self.current_waypoint.y,
+                )
+            ):
+                self.state_machine.transition_to(
+                    NavigationState.EMERGENCY_STOP
+                )
+        
+                return (
+                    self.state,
+                    0.0,
+                    0.0,
+                    MotionCommand(
+                        linear_velocity=0.0,
+                        angular_velocity=0.0,
+                    ),
+                )
+        
         if self.state == NavigationState.AVOIDING:
             if obstacle_information is None:
                 return (
