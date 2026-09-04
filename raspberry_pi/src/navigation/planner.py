@@ -158,12 +158,15 @@ class NavigationPlanner:
 
         if self.state == NavigationState.REPLANNING:
             self.replan(pose)
-            
-        if obstacle_information is not None and obstacle_information.has_obstacle:
-            if self.state != NavigationState.AVOIDING:
-                self.state_machine.transition_to(
-                    NavigationState.AVOIDING
-                )
+
+        if (
+            self.state == NavigationState.NAVIGATING
+            and obstacle_information is not None
+            and obstacle_information.has_obstacle
+        ):
+            self.state_machine.transition_to(
+                NavigationState.AVOIDING
+            )
 
         if self.current_waypoint is None:
             self.state_machine.transition_to(NavigationState.IDLE)
@@ -221,20 +224,6 @@ class NavigationPlanner:
             self.state_machine.transition_to(
                 NavigationState.REPLANNING
             )
-            self.replan(pose)
-
-        if (
-            self.state == NavigationState.AVOIDING
-            and (
-                obstacle_information is None
-                or not obstacle_information.has_obstacle
-            )
-        ):
-            self.state_machine.transition_to(
-                NavigationState.REPLANNING
-            )
-
-        if self.state == NavigationState.REPLANNING:
             self.replan(pose)
 
         distance = calculate_distance_to_waypoint(

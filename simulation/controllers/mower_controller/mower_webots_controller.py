@@ -164,18 +164,7 @@ def run_simulation():
             if distance < 0.8
             else ()
         )
-        if obstacle_detected:
-            navigation_planner.transition_to(
-                NavigationState.AVOIDING
-            )
 
-        if (
-            navigation_planner.state == NavigationState.AVOIDING
-            and obstacle_avoidance.is_clear(obstacle_information)
-        ):
-            navigation_planner.transition_to(
-                NavigationState.REPLANNING
-            )
         
 
         # Read wheel encoder positions
@@ -229,8 +218,10 @@ def run_simulation():
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)
         
-        
-        
+        elif obstacle_detected:
+            left_motor.setVelocity(0.0)
+            right_motor.setVelocity(0.0)
+                
         elif navigation_state == NavigationState.GOAL_REACHED:
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)
