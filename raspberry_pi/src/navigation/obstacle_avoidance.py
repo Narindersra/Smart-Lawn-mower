@@ -20,22 +20,27 @@ class ObstacleAvoidance:
         self.avoidance_angular_velocity = avoidance_angular_velocity
         self.clearance_distance = clearance_distance
 
-    def calculate(
-        self,
-        obstacle_information: ObstacleInformation,
-    ) -> MotionCommand:
-        """
-        Generate an avoidance command when an obstacle is present.
-
-        The initial baseline maneuver is a slow left turn.
-        """
-
+    def calculate(self, obstacle_information: ObstacleInformation) -> MotionCommand:
         if not obstacle_information.has_obstacle:
             return MotionCommand(
                 linear_velocity=0.0,
                 angular_velocity=0.0,
             )
-
+    
+        nearest_distance = obstacle_information.nearest_distance
+    
+        if nearest_distance is None:
+            return MotionCommand(
+                linear_velocity=0.0,
+                angular_velocity=0.0,
+            )
+    
+        if nearest_distance < self.clearance_distance:
+            return MotionCommand(
+                linear_velocity=0.0,
+                angular_velocity=self.avoidance_angular_velocity,
+            )
+    
         return MotionCommand(
             linear_velocity=self.avoidance_linear_velocity,
             angular_velocity=self.avoidance_angular_velocity,

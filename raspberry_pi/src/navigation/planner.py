@@ -15,6 +15,7 @@ from .speed_controller import SpeedController
 from .geofence import Geofence
 from .navigation_state_machine import NavigationStateMachine
 from .path_planner import PathPlanner
+from .obstacle_avoidance import ObstacleAvoidance
 
 
 class NavigationPlanner:
@@ -39,6 +40,7 @@ class NavigationPlanner:
         self.speed_controller = SpeedController()
         self.state_machine = NavigationStateMachine()
         self.path_planner = PathPlanner()
+        self.obstacle_avoidance = ObstacleAvoidance()
         self.goal_waypoint: Waypoint | None = None
 
     def transition_to(
@@ -143,6 +145,7 @@ class NavigationPlanner:
     def update(
         self,
         pose: RobotPose,
+        obstacle_information=None,
     ) -> tuple[NavigationState, float, float, MotionCommand]:
         """
         Calculate the robot's relationship to the current waypoint.
@@ -152,6 +155,15 @@ class NavigationPlanner:
             distance to waypoint,
             heading error.
         """
+
+        if self.state == NavigationState.REPLANNING:
+            self.replan(pose)
+            
+        if obstacle_information is not None and obstacle_information.has_obstacle:
+            if self.state != NavigationState.AVOIDING:
+                self.state_machine.transition_to(
+                    NavigationState.AVOIDING
+                )
 
         if self.current_waypoint is None:
             self.state_machine.transition_to(NavigationState.IDLE)
@@ -181,6 +193,49 @@ class NavigationPlanner:
                     angular_velocity=0.0,
                 ),
             )
+
+        if self.state == NavigationState.AVOIDING:
+            if obstacle_information is None:
+                return (
+                    self.state,
+                    0.0,
+                    0.0,
+                    MotionCommand(
+                        linear_velocity=0.0,
+                        angular_velocity=0.0,
+                    ),
+                )
+
+            if obstacle_information.has_obstacle:
+                avoidance_command = self.obstacle_avoidance.calculate(
+                    obstacle_information
+                )
+
+                return (
+                    self.state,
+                    0.0,
+                    0.0,
+                    avoidance_command,
+                )
+
+            self.state_machine.transition_to(
+                NavigationState.REPLANNING
+            )
+            self.replan(pose)
+
+        if (
+            self.state == NavigationState.AVOIDING
+            and (
+                obstacle_information is None
+                or not obstacle_information.has_obstacle
+            )
+        ):
+            self.state_machine.transition_to(
+                NavigationState.REPLANNING
+            )
+
+        if self.state == NavigationState.REPLANNING:
+            self.replan(pose)
 
         distance = calculate_distance_to_waypoint(
             pose,
@@ -229,8 +284,6 @@ class NavigationPlanner:
                 ]
             )
 
-            self.state = NavigationState.NAVIGATING
-
         distance = calculate_distance_to_waypoint(
             pose,
             self.current_waypoint,
@@ -258,9 +311,7 @@ class NavigationPlanner:
             angular_velocity=angular_velocity,
         )
 
-        self.state_machine.transition_to(
-            NavigationState.NAVIGATING
-        )
+        
          
 
         return (
