@@ -32,23 +32,50 @@ from ai.inference.inference import InferenceEngine
 
 def run_simulation():
     robot = Robot()
-    # Load safety configuration
+
+    # --------------------------------------------------
+    # Load configuration
+    # --------------------------------------------------
     project_root = Path(__file__).resolve().parents[3]
     config_path = project_root / "config" / "development" / "config.yaml"
 
     with config_path.open("r", encoding="utf-8") as config_file:
         config = yaml.safe_load(config_file)
 
+    # --------------------------------------------------
+    # Safety Configuration
+    # --------------------------------------------------
     ai_stop_classes = set(
         config["safety"]["ai_stop_classes"]
     )
 
-    obstacle_distance_threshold = config["safety"]["obstacle_distance_threshold"]
-    ai_confidence_threshold = config["safety"]["ai_confidence_threshold"]
+    obstacle_distance_threshold = config["safety"][
+        "obstacle_distance_threshold"
+    ]
 
+    ai_confidence_threshold = config["safety"][
+        "ai_confidence_threshold"
+    ]
+
+    # --------------------------------------------------
+    # Geofence Configuration
+    # --------------------------------------------------
+    geofence_config = config["geofence"]
+
+    geofence = Geofence(
+        min_x=geofence_config["min_x"],
+        max_x=geofence_config["max_x"],
+        min_y=geofence_config["min_y"],
+        max_y=geofence_config["max_y"],
+    )
+
+    # --------------------------------------------------
+    # Safety Manager
+    # --------------------------------------------------
     safety_manager = SafetyManager(
         ai_stop_classes,
         obstacle_distance_threshold,
+        geofence=geofence,
     )
 
     timestep = int(robot.getBasicTimeStep())
@@ -57,20 +84,22 @@ def run_simulation():
     # IMU
     # --------------------------------------------------
     imu = robot.getDevice("imu")
-    
 
     # --------------------------------------------------
     # GPS
     # --------------------------------------------------
     gps = robot.getDevice("gps")
-    
 
+    # --------------------------------------------------
     # AI Inference
+    # --------------------------------------------------
     inference_engine = InferenceEngine(
         confidence_threshold=ai_confidence_threshold
     )
 
+    # --------------------------------------------------
     # AI Safety State
+    # --------------------------------------------------
     ai_safety_stop = False
 
     # --------------------------------------------------
@@ -96,6 +125,7 @@ def run_simulation():
     # --------------------------------------------------
     camera = robot.getDevice("camera")
     camera.enable(timestep)
+
     camera_adapter = WebotsCameraAdapter(camera)
     camera_adapter.initialize(timestep)
 
@@ -108,7 +138,9 @@ def run_simulation():
     left_encoder.enable(timestep)
     right_encoder.enable(timestep)
 
-
+    # --------------------------------------------------
+    # Localization
+    # --------------------------------------------------
     gps_origin = config["localization"]["gps_origin"]
 
     localization_manager = LocalizationManager(
@@ -124,27 +156,25 @@ def run_simulation():
         timestep=timestep,
     )
 
-    geofence_config = config["geofence"]
-
-    geofence = Geofence(
-        min_x=geofence_config["min_x"],
-        max_x=geofence_config["max_x"],
-        min_y=geofence_config["min_y"],
-        max_y=geofence_config["max_y"],
-    )
-
+    # --------------------------------------------------
+    # Navigation Planner
+    # --------------------------------------------------
     navigation_planner = NavigationPlanner(
         waypoint_tolerance=0.15,
         geofence=geofence,
     )
 
+    # --------------------------------------------------
+    # Differential Drive Controller
+    # --------------------------------------------------
     drive_controller = DifferentialDriveController(
         wheel_radius=0.08,
         wheel_track=0.44,
     )
 
-
-
+    # --------------------------------------------------
+    # Initial Navigation Goal
+    # --------------------------------------------------
     navigation_planner.set_waypoint(
         Waypoint(
             x=5.0,
@@ -157,33 +187,74 @@ def run_simulation():
     # --------------------------------------------------
     while robot.step(timestep) != -1:
 
-        # Read front distance sensor
+        # --------------------------------------------------
+        # Read Front Distance Sensor
+        # --------------------------------------------------
         distance = ds_front.getValue() / 1000.0
-        
-        obstacle_detected = safety_manager.should_stop_for_obstacle(distance)
+
+        obstacle_detected = distance < 0.8
+
+        critical_obstacle = (
+            safety_manager.should_stop_for_obstacle(distance)
+        )
 
         obstacle_information = ObstacleInformation(
             obstacles=(
                 Obstacle(distance=distance),
             )
-            if distance < 0.8
+            if obstacle_detected
             else ()
         )
 
-        
-
-        # Read wheel encoder positions
+        # --------------------------------------------------
+        # Read Wheel Encoder Positions
+        # --------------------------------------------------
         left_encoder_position = left_encoder.getValue()
         right_encoder_position = right_encoder.getValue()
 
-
+        # --------------------------------------------------
+        # Localization Update
+        # --------------------------------------------------
         pose = localization_manager.update(
             left_encoder_position=left_encoder_position,
             right_encoder_position=right_encoder_position,
         )
 
-        localization_ready = localization_manager.is_ready()
+        geofence_safety_stop = (
+            safety_manager.should_stop_for_geofence(
+                pose
+            )
+        )
 
+        localization_ready = (
+            localization_manager.is_ready()
+        )
+
+        # --------------------------------------------------
+        # Camera Frame
+        # --------------------------------------------------
+        frame = camera_adapter.get_frame()
+
+        # --------------------------------------------------
+        # AI Object Detection
+        # --------------------------------------------------
+        detections = []
+
+        if frame is not None:
+            detections = inference_engine.run(frame)
+
+        # --------------------------------------------------
+        # AI Safety Check
+        # --------------------------------------------------
+        ai_safety_stop = (
+            safety_manager.should_emergency_stop(
+                detections
+            )
+        )
+
+        # --------------------------------------------------
+        # Navigation Update
+        # --------------------------------------------------
         navigation_state, distance_to_goal, heading_error, motion_command = (
             navigation_planner.update(
                 pose,
@@ -191,6 +262,9 @@ def run_simulation():
             )
         )
 
+        # --------------------------------------------------
+        # Differential Drive Calculation
+        # --------------------------------------------------
         left_wheel_velocity, right_wheel_velocity = (
             drive_controller.calculate_wheel_velocities(
                 motion_command.linear_velocity,
@@ -198,43 +272,29 @@ def run_simulation():
             )
         )
 
-        
-
-        # Camera Frame
-        frame = camera_adapter.get_frame()
-
-        # AI Object Detection
-        detections = []
-
-        if frame is not None:
-            detections = inference_engine.run(frame)
-
-        # AI Safety Check
-        ai_safety_stop = safety_manager.should_emergency_stop(detections)
-
         # --------------------------------------------------
-        # Basic Movement / Obstacle Avoidance
+        # Final Safety / Movement Gate
         # --------------------------------------------------
         if not localization_ready:
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)
-        
-        elif ai_safety_stop:
+
+        elif ai_safety_stop or geofence_safety_stop:
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)
-        
-        elif obstacle_detected:
+
+        elif critical_obstacle:
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)
 
         elif navigation_state == NavigationState.GOAL_REACHED:
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)
-        
+
         elif navigation_state == NavigationState.EMERGENCY_STOP:
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)
-        
+
         else:
             left_motor.setVelocity(left_wheel_velocity)
             right_motor.setVelocity(right_wheel_velocity)
