@@ -28,6 +28,10 @@ class NavigationStateMachine:
 
         self.state = new_state
 
+    def resume_from_emergency_stop(self) -> None:
+        if self.state == NavigationState.EMERGENCY_STOP:
+            self.state = NavigationState.NAVIGATING
+
     def _is_valid_transition(
         self,
         new_state: NavigationState,
