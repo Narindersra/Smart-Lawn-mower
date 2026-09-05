@@ -16,3 +16,11 @@ geofence:
   max_x: 10.0
   min_y: 0.0
   max_y: 10.0
+
+coverage:
+  cutting_width: 0.40
+  lane_spacing: 0.40
+  boundary_margin: 0.20
+  turning_margin: 0.20
+  waypoint_tolerance: 0.15
+  orientation: x
