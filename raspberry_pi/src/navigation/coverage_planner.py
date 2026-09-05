@@ -259,6 +259,11 @@ class CoveragePlanner:
         return self._config
 
     @property
+    def coverage_path(self) -> Path | None:
+        """Return the currently generated coverage path."""
+        return self._coverage_path
+
+    @property
     def orientation(self) -> CoverageOrientation:
         return self._config.orientation
 

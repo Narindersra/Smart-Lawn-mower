@@ -19,15 +19,22 @@ if str(SRC_ROOT) not in sys.path:
 from localization.localization_manager import LocalizationManager
 
 from navigation.planner import NavigationPlanner
-from navigation.navigation_types import NavigationState, Waypoint
+from navigation.navigation_types import NavigationState
 from navigation.differential_drive import DifferentialDriveController
 from navigation.obstacle_types import Obstacle, ObstacleInformation
 from navigation.geofence import Geofence
+from navigation.coverage_planner import (
+    CoverageConfig,
+    CoverageOrientation,
+    CoveragePlanner,
+)
 
 from safety.safety_manager import SafetyManager
 
 from webots_camera import WebotsCameraAdapter
 from ai.inference.inference import InferenceEngine
+
+from mission.mission_manager import MissionManager
 
 
 def run_simulation():
@@ -165,6 +172,35 @@ def run_simulation():
     )
 
     # --------------------------------------------------
+    # Coverage Planner
+    # --------------------------------------------------
+    coverage_config = config["coverage"]
+
+    coverage_planner = CoveragePlanner(
+        geofence=geofence,
+        config=CoverageConfig(
+            cutting_width=coverage_config["cutting_width"],
+            lane_spacing=coverage_config["lane_spacing"],
+            boundary_margin=coverage_config["boundary_margin"],
+            turning_margin=coverage_config["turning_margin"],
+            waypoint_tolerance=coverage_config[
+                "waypoint_tolerance"
+            ],
+            orientation=CoverageOrientation(
+                coverage_config["orientation"]
+            ),
+        ),
+    )
+
+    # --------------------------------------------------
+    # Mission Manager
+    # --------------------------------------------------
+    mission_manager = MissionManager(
+        coverage_planner=coverage_planner,
+        navigation_planner=navigation_planner,
+    )
+
+    # --------------------------------------------------
     # Differential Drive Controller
     # --------------------------------------------------
     drive_controller = DifferentialDriveController(
@@ -173,14 +209,14 @@ def run_simulation():
     )
 
     # --------------------------------------------------
-    # Initial Navigation Goal
+    # Prepare Mission
     # --------------------------------------------------
-    navigation_planner.set_waypoint(
-        Waypoint(
-            x=5.0,
-            y=5.0,
-        )
-    )
+    mission_manager.prepare()
+
+    # --------------------------------------------------
+    # Start Mission
+    # --------------------------------------------------
+    mission_manager.start()
 
     # --------------------------------------------------
     # Main Simulation Loop
@@ -260,6 +296,18 @@ def run_simulation():
                 pose,
                 obstacle_information=obstacle_information,
             )
+        )
+
+        # --------------------------------------------------
+        # Mission Update
+        # --------------------------------------------------
+        mission_manager.update(
+            navigation_state=navigation_state,
+            safety_stop=(
+                ai_safety_stop
+                or geofence_safety_stop
+                or critical_obstacle
+            ),
         )
 
         # --------------------------------------------------
