@@ -1,3 +1,4 @@
+import time
 import sys
 from pathlib import Path
 
@@ -222,6 +223,7 @@ def run_simulation():
     # Main Simulation Loop
     # --------------------------------------------------
     while robot.step(timestep) != -1:
+        loop_start = time.perf_counter()
 
         # --------------------------------------------------
         # Read Front Distance Sensor
@@ -251,9 +253,15 @@ def run_simulation():
         # --------------------------------------------------
         # Localization Update
         # --------------------------------------------------
+        localization_start = time.perf_counter()
+
         pose = localization_manager.update(
             left_encoder_position=left_encoder_position,
             right_encoder_position=right_encoder_position,
+        )
+
+        localization_time = (
+            time.perf_counter() - localization_start
         )
 
         geofence_safety_stop = (
@@ -276,8 +284,12 @@ def run_simulation():
         # --------------------------------------------------
         detections = []
 
+        ai_start = time.perf_counter()
+
         if frame is not None:
             detections = inference_engine.run(frame)
+
+        ai_time = time.perf_counter() - ai_start
 
         # --------------------------------------------------
         # AI Safety Check
@@ -291,16 +303,27 @@ def run_simulation():
         # --------------------------------------------------
         # Navigation Update
         # --------------------------------------------------
-        navigation_state, distance_to_goal, heading_error, motion_command = (
-            navigation_planner.update(
-                pose,
-                obstacle_information=obstacle_information,
-            )
+        navigation_start = time.perf_counter()
+
+        (
+            navigation_state,
+            distance_to_goal,
+            heading_error,
+            motion_command,
+        ) = navigation_planner.update(
+            pose,
+            obstacle_information=obstacle_information,
+        )
+
+        navigation_time = (
+            time.perf_counter() - navigation_start
         )
 
         # --------------------------------------------------
         # Mission Update
         # --------------------------------------------------
+        mission_start = time.perf_counter()
+
         mission_manager.update(
             navigation_state=navigation_state,
             safety_stop=(
@@ -308,6 +331,10 @@ def run_simulation():
                 or geofence_safety_stop
                 or critical_obstacle
             ),
+        )
+
+        mission_time = (
+            time.perf_counter() - mission_start
         )
 
         # --------------------------------------------------
@@ -347,6 +374,21 @@ def run_simulation():
             left_motor.setVelocity(left_wheel_velocity)
             right_motor.setVelocity(right_wheel_velocity)
 
+        # --------------------------------------------------
+        # Performance Baseline Measurement
+        # --------------------------------------------------
+        loop_time = time.perf_counter() - loop_start
+
+        print(
+            f"[PERF] "
+            f"loop={loop_time * 1000:.2f}ms "
+            f"ai={ai_time * 1000:.2f}ms "
+            f"localization={localization_time * 1000:.2f}ms "
+            f"navigation={navigation_time * 1000:.2f}ms "
+            f"mission={mission_time * 1000:.2f}ms"
+        )
+
 
 if __name__ == "__main__":
     run_simulation()
+    
