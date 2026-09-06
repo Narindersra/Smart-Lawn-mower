@@ -4,9 +4,13 @@ from .navigation_types import NavigationState
 class NavigationStateMachine:
     """
     Manages valid navigation state transitions.
+
+    The state machine prevents invalid navigation states from being
+    entered and provides explicit handling for emergency-stop recovery.
     """
 
     def __init__(self):
+        """Initialize the navigation state machine in the IDLE state."""
         self.state = NavigationState.IDLE
 
     def transition_to(
@@ -15,8 +19,16 @@ class NavigationStateMachine:
     ) -> None:
         """
         Transition to a new navigation state.
+
+        Args:
+            new_state: Navigation state to transition into.
+
+        Raises:
+            ValueError: If the requested transition is not allowed.
         """
 
+        # No transition is required when the requested state is already
+        # the current state.
         if new_state == self.state:
             return
 
@@ -29,6 +41,12 @@ class NavigationStateMachine:
         self.state = new_state
 
     def resume_from_emergency_stop(self) -> None:
+        """
+        Resume navigation after an emergency stop.
+
+        Emergency-stop recovery is intentionally limited to transitioning
+        from EMERGENCY_STOP back to NAVIGATING.
+        """
         if self.state == NavigationState.EMERGENCY_STOP:
             self.state = NavigationState.NAVIGATING
 
@@ -37,7 +55,13 @@ class NavigationStateMachine:
         new_state: NavigationState,
     ) -> bool:
         """
-        Determine whether a state transition is allowed.
+        Determine whether a navigation state transition is allowed.
+
+        Args:
+            new_state: State being requested.
+
+        Returns:
+            True if the transition is valid; otherwise False.
         """
 
         valid_transitions = {
@@ -84,7 +108,8 @@ class NavigationStateMachine:
     def get_state(self) -> NavigationState:
         """
         Return the current navigation state.
-        """
 
+        Returns:
+            Current NavigationState.
+        """
         return self.state
-    

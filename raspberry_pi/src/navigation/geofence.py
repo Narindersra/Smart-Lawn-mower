@@ -4,6 +4,9 @@ from localization.position_estimator import RobotPose
 class Geofence:
     """
     Defines the allowed operating area for the robot.
+
+    The geofence is represented as a rectangular boundary in the
+    robot's local X/Y coordinate system.
     """
 
     def __init__(
@@ -13,9 +16,25 @@ class Geofence:
         min_y: float,
         max_y: float,
     ):
+        """
+        Initialize the rectangular geofence.
+
+        Args:
+            min_x: Minimum allowed X coordinate.
+            max_x: Maximum allowed X coordinate.
+            min_y: Minimum allowed Y coordinate.
+            max_y: Maximum allowed Y coordinate.
+
+        Raises:
+            ValueError: If the minimum boundary is greater than or
+                equal to the corresponding maximum boundary.
+        """
+
+        # Validate the X-axis boundaries.
         if min_x >= max_x:
             raise ValueError("min_x must be smaller than max_x.")
 
+        # Validate the Y-axis boundaries.
         if min_y >= max_y:
             raise ValueError("min_y must be smaller than max_y.")
 
@@ -26,7 +45,14 @@ class Geofence:
 
     def contains(self, pose: RobotPose) -> bool:
         """
-        Return True if the robot is inside the allowed area.
+        Check whether the robot pose is inside the allowed area.
+
+        Args:
+            pose: Current robot pose.
+
+        Returns:
+            True if the robot's X/Y position is inside or exactly on
+            the geofence boundary; otherwise False.
         """
 
         return (
@@ -40,7 +66,15 @@ class Geofence:
         y: float,
     ) -> bool:
         """
-        Return True if a position is inside the allowed area.
+        Check whether a position is inside the allowed area.
+
+        Args:
+            x: X coordinate to check.
+            y: Y coordinate to check.
+
+        Returns:
+            True if the position is inside or exactly on the geofence
+            boundary; otherwise False.
         """
 
         return (
