@@ -9,6 +9,14 @@ class DifferentialDriveController:
         wheel_radius: float = 0.08,
         wheel_track: float = 0.44,
     ):
+        """
+        Initialize the differential-drive controller.
+
+        Args:
+            wheel_radius: Radius of the drive wheels in meters.
+            wheel_track: Distance between the left and right wheels
+                in meters.
+        """
         self.wheel_radius = wheel_radius
         self.wheel_track = wheel_track
 
@@ -18,7 +26,7 @@ class DifferentialDriveController:
         angular_velocity: float,
     ) -> tuple[float, float]:
         """
-        Convert robot linear/angular velocity into wheel
+        Convert robot linear and angular velocity into wheel
         angular velocities.
 
         Args:
@@ -29,13 +37,13 @@ class DifferentialDriveController:
                 Robot angular velocity in radians per second.
 
         Returns:
-            left_wheel_velocity:
-                Left wheel angular velocity in radians per second.
-
-            right_wheel_velocity:
-                Right wheel angular velocity in radians per second.
+            Tuple containing:
+                - left wheel angular velocity in radians per second.
+                - right wheel angular velocity in radians per second.
         """
 
+        # Convert the robot's linear/angular command into the
+        # corresponding linear velocity of each wheel.
         left_linear_velocity = (
             linear_velocity
             - (angular_velocity * self.wheel_track / 2.0)
@@ -46,6 +54,8 @@ class DifferentialDriveController:
             + (angular_velocity * self.wheel_track / 2.0)
         )
 
+        # Convert wheel linear velocities into wheel angular
+        # velocities using the wheel radius.
         left_wheel_velocity = (
             left_linear_velocity / self.wheel_radius
         )

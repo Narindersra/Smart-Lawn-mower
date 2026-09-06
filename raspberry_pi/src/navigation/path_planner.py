@@ -5,7 +5,10 @@ from .navigation_types import Path, Waypoint
 
 class PathPlanner:
     """
-    Generates navigation paths between a start pose and a goal waypoint.
+    Generates navigation paths between the current robot pose
+    and a target waypoint.
+
+    The current implementation uses direct-path planning.
     """
 
     def create_direct_path(
@@ -15,9 +18,16 @@ class PathPlanner:
     ) -> Path:
         """
         Create a direct path from the robot's current position
-        to the goal.
+        to the goal waypoint.
 
-        The start position is not included as a waypoint.
+        The start position is intentionally not included as a waypoint.
+
+        Args:
+            start_pose: Current robot pose.
+            goal: Target waypoint.
+
+        Returns:
+            A Path containing the target waypoint.
         """
 
         return Path(
@@ -32,10 +42,19 @@ class PathPlanner:
         goal: Waypoint,
     ) -> Path:
         """
-        Generate a new path from the robot's current position
-        to the original goal.
+        Generate a new path from the current robot pose to the goal.
+
+        The current implementation replans using the same direct-path
+        strategy as the initial path generation.
+
+        Args:
+            current_pose: Robot's current pose.
+            goal: Original target waypoint.
+
+        Returns:
+            A new direct Path containing the target waypoint.
         """
-    
+
         return self.create_direct_path(
             start_pose=current_pose,
             goal=goal,

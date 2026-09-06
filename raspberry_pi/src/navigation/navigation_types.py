@@ -5,7 +5,12 @@ from enum import Enum
 @dataclass(frozen=True)
 class Waypoint:
     """
-    A target position in the local navigation coordinate system.
+    Represents a target position in the local navigation
+    coordinate system.
+
+    Attributes:
+        x: Target X position in meters.
+        y: Target Y position in meters.
     """
 
     x: float
@@ -15,7 +20,13 @@ class Waypoint:
 @dataclass(frozen=True)
 class Path:
     """
-    An ordered sequence of waypoints forming a navigation path.
+    Represents an ordered navigation path.
+
+    A path consists of one or more waypoints that the robot
+    can follow sequentially.
+
+    Attributes:
+        waypoints: Ordered tuple of navigation waypoints.
     """
 
     waypoints: tuple[Waypoint, ...]
@@ -23,7 +34,7 @@ class Path:
 
 class NavigationState(Enum):
     """
-    Current state of the navigation system.
+    Represents the current state of the navigation system.
     """
 
     IDLE = "idle"
@@ -37,13 +48,14 @@ class NavigationState(Enum):
 @dataclass(frozen=True)
 class MotionCommand:
     """
-    Desired robot motion.
+    Represents the desired robot motion.
 
-    linear_velocity:
-        Forward/backward velocity in meters per second.
+    Attributes:
+        linear_velocity:
+            Forward/backward velocity in meters per second.
 
-    angular_velocity:
-        Rotational velocity in radians per second.
+        angular_velocity:
+            Rotational velocity in radians per second.
     """
 
     linear_velocity: float

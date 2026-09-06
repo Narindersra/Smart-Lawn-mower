@@ -7,7 +7,7 @@ from .navigation_types import Path, Waypoint
 
 class CoverageOrientation(str, Enum):
     """
-    Direction in which coverage lanes are generated.
+    Defines the direction in which coverage lanes are generated.
     """
 
     X = "x"
@@ -16,7 +16,7 @@ class CoverageOrientation(str, Enum):
 
 class CoverageState(str, Enum):
     """
-    State of the coverage-planning process.
+    Represents the current state of the coverage-planning process.
     """
 
     IDLE = "idle"
@@ -29,9 +29,9 @@ class CoverageState(str, Enum):
 @dataclass(frozen=True)
 class CoverageBoundary:
     """
-    Rectangular lawn boundary used by the coverage planner.
+    Represents the rectangular lawn boundary.
 
-    Coordinates use the same coordinate system as the
+    Coordinates use the same local coordinate system as the
     navigation Geofence.
     """
 
@@ -41,6 +41,7 @@ class CoverageBoundary:
     max_y: float
 
     def __post_init__(self) -> None:
+        """Validate the boundary dimensions."""
         if self.min_x >= self.max_x:
             raise ValueError(
                 "min_x must be smaller than max_x."
@@ -53,13 +54,24 @@ class CoverageBoundary:
 
     @property
     def width(self) -> float:
+        """Return the total boundary width in meters."""
         return self.max_x - self.min_x
 
     @property
     def height(self) -> float:
+        """Return the total boundary height in meters."""
         return self.max_y - self.min_y
 
-    def contains(self, x: float, y: float) -> bool:
+    def contains(
+        self,
+        x: float,
+        y: float,
+    ) -> bool:
+        """
+        Check whether a position lies inside the boundary.
+
+        Boundary edges are considered valid positions.
+        """
         return (
             self.min_x <= x <= self.max_x
             and self.min_y <= y <= self.max_y
@@ -71,8 +83,8 @@ class CoverageLane:
     """
     Represents one straight mowing lane.
 
-    The lane endpoints are expressed in the same coordinate
-    system as the navigation Waypoint.
+    Lane endpoints use the same coordinate system as navigation
+    Waypoints.
     """
 
     start_x: float
@@ -82,9 +94,8 @@ class CoverageLane:
 
     def length(self) -> float:
         """
-        Return the geometric length of the lane in meters.
+        Calculate the geometric length of the lane in meters.
         """
-
         dx = self.end_x - self.start_x
         dy = self.end_y - self.start_y
 
@@ -92,10 +103,8 @@ class CoverageLane:
 
     def reversed(self) -> "CoverageLane":
         """
-        Return the same lane with its start and end points
-        exchanged.
+        Return a copy of the lane with start and end points exchanged.
         """
-
         return CoverageLane(
             start_x=self.end_x,
             start_y=self.end_y,
@@ -105,30 +114,23 @@ class CoverageLane:
 
     @property
     def start(self) -> tuple[float, float]:
-        """
-        Return the lane start point as (x, y).
-        """
-
-        return (self.start_x, self.start_y)
+        """Return the lane start point as an (x, y) tuple."""
+        return self.start_x, self.start_y
 
     @property
     def end(self) -> tuple[float, float]:
-        """
-        Return the lane end point as (x, y).
-        """
-
-        return (self.end_x, self.end_y)
+        """Return the lane end point as an (x, y) tuple."""
+        return self.end_x, self.end_y
 
 
 @dataclass(frozen=True)
 class CoverageTurn:
     """
-    Represents a connection between two consecutive
+    Represents the connection between two consecutive
     coverage lanes.
 
-    The turn is represented by an ordered sequence of
-    points from the end of the current lane to the start
-    of the next lane.
+    The turn contains an ordered sequence of points from the
+    end of the current lane to the start of the next lane.
     """
 
     points: tuple[tuple[float, float], ...]
@@ -137,9 +139,9 @@ class CoverageTurn:
 @dataclass(frozen=True)
 class CoverageConfig:
     """
-    Configuration parameters used by the coverage planner.
+    Stores configuration parameters used by the coverage planner.
 
-    All distance values are expressed in meters.
+    All distance-related values are expressed in meters.
     """
 
     cutting_width: float
@@ -150,6 +152,7 @@ class CoverageConfig:
     orientation: CoverageOrientation = CoverageOrientation.X
 
     def __post_init__(self) -> None:
+        """Validate coverage configuration parameters."""
         if self.cutting_width <= 0.0:
             raise ValueError(
                 "cutting_width must be greater than zero."
@@ -194,19 +197,19 @@ class CoveragePlanner:
     """
     Generates and manages the lawn-mowing coverage path.
 
-    Responsibilities:
-        - Read the existing Geofence.
-        - Represent the lawn boundary.
-        - Apply the configured usable-area margin.
-        - Generate parallel mowing lanes.
-        - Order lanes in boustrophedon pattern.
-        - Generate boundary-safe turning paths.
-        - Generate the complete coverage path.
-        - Convert coverage points into navigation Path/Waypoint types.
-        - Manage sequential coverage waypoint execution.
-        - Track coverage state and progress.
-        - Provide geometric coverage, overlap, and missed-area estimates.
-        - Handle invalid or empty coverage cases safely.
+    Responsibilities include:
+
+        - Representing the existing Geofence boundary.
+        - Applying the configured usable-area margin.
+        - Generating parallel mowing lanes.
+        - Ordering lanes in a boustrophedon pattern.
+        - Generating boundary-safe turning paths.
+        - Generating the complete coverage path.
+        - Converting coverage points into navigation Path/Waypoint types.
+        - Managing sequential coverage waypoint execution.
+        - Tracking coverage state and progress.
+        - Estimating planned coverage, overlap, and missed area.
+        - Handling invalid or empty coverage areas safely.
     """
 
     def __init__(
@@ -214,6 +217,17 @@ class CoveragePlanner:
         geofence: Geofence,
         config: CoverageConfig,
     ) -> None:
+        """
+        Initialize the coverage planner.
+
+        Args:
+            geofence: Existing navigation geofence.
+            config: Coverage planning configuration.
+
+        Raises:
+            ValueError: If the geofence/config is missing or the
+                configured boundary margin leaves no usable area.
+        """
         if geofence is None:
             raise ValueError(
                 "CoveragePlanner requires a valid Geofence."
@@ -224,6 +238,7 @@ class CoveragePlanner:
                 "CoveragePlanner requires a valid CoverageConfig."
             )
 
+        # Convert the navigation geofence into the coverage boundary.
         self._boundary = CoverageBoundary(
             min_x=geofence.min_x,
             max_x=geofence.max_x,
@@ -232,10 +247,13 @@ class CoveragePlanner:
         )
 
         self._config = config
+
+        # Coverage execution state.
         self._current_waypoint_index = 0
         self._coverage_path: Path | None = None
         self._state = CoverageState.IDLE
 
+        # Ensure the configured boundary margin leaves a usable lawn.
         if self.usable_width <= 0.0:
             raise ValueError(
                 "boundary_margin is too large for the lawn width."
@@ -252,31 +270,37 @@ class CoveragePlanner:
 
     @property
     def boundary(self) -> CoverageBoundary:
+        """Return the original lawn boundary."""
         return self._boundary
 
     @property
     def config(self) -> CoverageConfig:
+        """Return the active coverage configuration."""
         return self._config
 
     @property
     def coverage_path(self) -> Path | None:
-        """Return the currently generated coverage path."""
+        """Return the currently generated navigation coverage path."""
         return self._coverage_path
 
     @property
     def orientation(self) -> CoverageOrientation:
+        """Return the configured coverage orientation."""
         return self._config.orientation
 
     @property
     def state(self) -> CoverageState:
+        """Return the current coverage state."""
         return self._state
 
     @property
     def width(self) -> float:
+        """Return the total lawn width in meters."""
         return self._boundary.width
 
     @property
     def height(self) -> float:
+        """Return the total lawn height in meters."""
         return self._boundary.height
 
     # ------------------------------------------------------------------
@@ -285,6 +309,7 @@ class CoveragePlanner:
 
     @property
     def usable_min_x(self) -> float:
+        """Return the minimum usable X coordinate."""
         return (
             self._boundary.min_x
             + self._config.boundary_margin
@@ -292,6 +317,7 @@ class CoveragePlanner:
 
     @property
     def usable_max_x(self) -> float:
+        """Return the maximum usable X coordinate."""
         return (
             self._boundary.max_x
             - self._config.boundary_margin
@@ -299,6 +325,7 @@ class CoveragePlanner:
 
     @property
     def usable_min_y(self) -> float:
+        """Return the minimum usable Y coordinate."""
         return (
             self._boundary.min_y
             + self._config.boundary_margin
@@ -306,6 +333,7 @@ class CoveragePlanner:
 
     @property
     def usable_max_y(self) -> float:
+        """Return the maximum usable Y coordinate."""
         return (
             self._boundary.max_y
             - self._config.boundary_margin
@@ -313,18 +341,24 @@ class CoveragePlanner:
 
     @property
     def usable_width(self) -> float:
+        """Return the usable lawn width in meters."""
         return self.usable_max_x - self.usable_min_x
 
     @property
     def usable_height(self) -> float:
+        """Return the usable lawn height in meters."""
         return self.usable_max_y - self.usable_min_y
 
-    def contains_position(self, x: float, y: float) -> bool:
+    def contains_position(
+        self,
+        x: float,
+        y: float,
+    ) -> bool:
         """
-        Check whether a position lies inside the original
-        lawn boundary.
-        """
+        Check whether a position lies inside the original lawn boundary.
 
+        This check does not apply the coverage boundary margin.
+        """
         return self._boundary.contains(x, y)
 
     def is_inside_usable_area(
@@ -333,10 +367,11 @@ class CoveragePlanner:
         y: float,
     ) -> bool:
         """
-        Check whether a position lies inside the usable
-        mowing area after applying boundary margin.
-        """
+        Check whether a position lies inside the usable mowing area.
 
+        The configured boundary margin is applied to the original
+        geofence before this check is performed.
+        """
         return (
             self.usable_min_x <= x <= self.usable_max_x
             and self.usable_min_y <= y <= self.usable_max_y
@@ -348,13 +383,11 @@ class CoveragePlanner:
 
     def generate_lanes(self) -> tuple[CoverageLane, ...]:
         """
-        Generate parallel straight mowing lanes inside the
-        usable lawn boundary.
+        Generate parallel mowing lanes inside the usable boundary.
 
-        Lanes are generated according to the configured
-        orientation and lane spacing.
+        Lanes are generated according to the configured orientation
+        and lane spacing.
         """
-
         lanes: list[CoverageLane] = []
 
         if (
@@ -397,6 +430,7 @@ class CoveragePlanner:
 
                 coordinate += self.config.lane_spacing
 
+        # Ignore zero-length lanes.
         return tuple(
             lane
             for lane in lanes
@@ -408,14 +442,11 @@ class CoveragePlanner:
         lane: CoverageLane,
     ) -> bool:
         """
-        Check whether both endpoints of a lane are inside
-        the usable mowing area.
+        Check whether both lane endpoints are inside the usable area.
 
-        For the current rectangular boundary and straight
-        axis-aligned lanes, checking both endpoints is
-        sufficient.
+        For the current rectangular, axis-aligned lanes, checking both
+        endpoints is sufficient to validate the complete lane.
         """
-
         return (
             self.is_inside_usable_area(
                 lane.start_x,
@@ -437,12 +468,10 @@ class CoveragePlanner:
         """
         Generate coverage lanes in boustrophedon order.
 
-        Adjacent lanes are traversed in opposite directions
-        to minimize unnecessary repositioning.
+        Consecutive lanes are traversed in opposite directions to
+        reduce unnecessary repositioning between lanes.
         """
-
         lanes = self.generate_lanes()
-
         ordered_lanes: list[CoverageLane] = []
 
         for index, lane in enumerate(lanes):
@@ -458,9 +487,10 @@ class CoveragePlanner:
         lanes: tuple[CoverageLane, ...],
     ) -> tuple[tuple[float, float], ...]:
         """
-        Return lane endpoints in traversal order.
-        """
+        Return lane endpoints in their traversal order.
 
+        Each lane contributes its start point followed by its end point.
+        """
         endpoints: list[tuple[float, float]] = []
 
         for lane in lanes:
@@ -479,14 +509,11 @@ class CoveragePlanner:
         next_lane: CoverageLane,
     ) -> CoverageTurn:
         """
-        Generate a boundary-safe U-turn connection between
-        two consecutive coverage lanes.
+        Generate a boundary-safe U-turn between two consecutive lanes.
 
-        The robot first moves inward from the lawn edge,
-        changes lane level, and then returns to the next
-        lane start.
+        The generated turn moves inward from the lawn edge, changes
+        lane level, and then approaches the start of the next lane.
         """
-
         if self.orientation == CoverageOrientation.X:
             if current_lane.end_x >= self.usable_max_x:
                 turn_x = (
@@ -499,6 +526,7 @@ class CoveragePlanner:
                     + self.config.turning_margin
                 )
 
+            # Keep the turn point inside the usable X range.
             turn_x = max(
                 self.usable_min_x,
                 min(self.usable_max_x, turn_x),
@@ -531,6 +559,7 @@ class CoveragePlanner:
                     + self.config.turning_margin
                 )
 
+            # Keep the turn point inside the usable Y range.
             turn_y = max(
                 self.usable_min_y,
                 min(self.usable_max_y, turn_y),
@@ -560,10 +589,12 @@ class CoveragePlanner:
         turn: CoverageTurn,
     ) -> None:
         """
-        Validate that every turn point remains inside
-        the usable lawn area.
-        """
+        Validate that every turn point remains inside the usable area.
 
+        Raises:
+            ValueError: If a generated turn contains a point outside
+                the usable mowing area.
+        """
         for x, y in turn.points:
             if not self.is_inside_usable_area(x, y):
                 raise ValueError(
@@ -581,14 +612,10 @@ class CoveragePlanner:
         """
         Generate the complete ordered coverage path.
 
-        The resulting point sequence contains:
-            lane start
-            lane end
-            turn points
-            next lane end
-            ...
+        The generated sequence contains lane endpoints and the
+        intermediate turning points required to connect consecutive
+        lanes.
         """
-
         lanes = self.generate_ordered_lanes()
 
         if not lanes:
@@ -597,11 +624,13 @@ class CoveragePlanner:
         path_points: list[tuple[float, float]] = []
 
         for index, lane in enumerate(lanes):
+            # Add the first lane's starting point only once.
             if index == 0:
                 path_points.append(lane.start)
 
             path_points.append(lane.end)
 
+            # Connect each lane to the following lane.
             if index < len(lanes) - 1:
                 next_lane = lanes[index + 1]
 
@@ -610,17 +639,15 @@ class CoveragePlanner:
                     next_lane=next_lane,
                 )
 
-                # turn.points[0] is already the current lane end.
+                # The first turn point is already the current lane end.
                 path_points.extend(turn.points[1:])
 
         return tuple(path_points)
 
     def generate_navigation_path(self) -> Path:
         """
-        Convert the generated coverage coordinates into
-        the existing navigation Path representation.
+        Convert coverage coordinates into navigation Path/Waypoint types.
         """
-
         coverage_points = self.generate_coverage_path()
 
         waypoints = tuple(
@@ -638,10 +665,10 @@ class CoveragePlanner:
         """
         Generate and initialize the complete coverage path.
 
-        The first waypoint becomes the current coverage
-        waypoint.
+        The first generated waypoint becomes the current coverage
+        waypoint. An empty path immediately moves the planner to
+        COMPLETED.
         """
-
         self._coverage_path = self.generate_navigation_path()
         self._current_waypoint_index = 0
 
@@ -655,9 +682,11 @@ class CoveragePlanner:
 
     def get_current_waypoint(self) -> Waypoint | None:
         """
-        Return the waypoint currently being executed.
-        """
+        Return the currently active coverage waypoint.
 
+        Returns:
+            Current waypoint, or None if no active waypoint exists.
+        """
         if self._coverage_path is None:
             return None
 
@@ -672,11 +701,12 @@ class CoveragePlanner:
 
     def advance_waypoint(self) -> Waypoint | None:
         """
-        Advance to the next coverage waypoint.
+        Advance the coverage planner to the next waypoint.
 
-        Returns the new current waypoint.
+        Returns:
+            The new current waypoint, or None when coverage is complete
+            or no coverage path is available.
         """
-
         if self._coverage_path is None:
             return None
 
@@ -698,26 +728,17 @@ class CoveragePlanner:
         return self.get_current_waypoint()
 
     def pause_coverage(self) -> None:
-        """
-        Pause the current coverage operation.
-        """
-
+        """Pause an active coverage operation."""
         if self._state == CoverageState.COVERING:
             self._state = CoverageState.PAUSED
 
     def resume_coverage(self) -> None:
-        """
-        Resume a paused coverage operation.
-        """
-
+        """Resume a paused coverage operation."""
         if self._state == CoverageState.PAUSED:
             self._state = CoverageState.COVERING
 
     def stop_coverage(self) -> None:
-        """
-        Stop the current coverage operation.
-        """
-
+        """Stop an active or paused coverage operation."""
         if self._state in (
             CoverageState.COVERING,
             CoverageState.PAUSED,
@@ -726,10 +747,12 @@ class CoveragePlanner:
 
     def is_coverage_complete(self) -> bool:
         """
-        Return True when all coverage waypoints have been
-        executed.
-        """
+        Return whether all coverage waypoints have been executed.
 
+        Returns:
+            True when the coverage path exists and the waypoint index
+            has reached the end of the path.
+        """
         if self._coverage_path is None:
             return False
 
@@ -744,19 +767,12 @@ class CoveragePlanner:
 
     @property
     def current_waypoint_index(self) -> int:
-        """
-        Return the zero-based current waypoint index.
-        """
-
+        """Return the zero-based current waypoint index."""
         return self._current_waypoint_index
 
     @property
     def total_waypoints(self) -> int:
-        """
-        Return the total number of generated navigation
-        waypoints.
-        """
-
+        """Return the total number of generated navigation waypoints."""
         if self._coverage_path is None:
             return 0
 
@@ -764,10 +780,7 @@ class CoveragePlanner:
 
     @property
     def remaining_waypoints(self) -> int:
-        """
-        Return the number of coverage waypoints remaining.
-        """
-
+        """Return the number of coverage waypoints remaining."""
         return max(
             self.total_waypoints
             - self._current_waypoint_index,
@@ -780,10 +793,9 @@ class CoveragePlanner:
         Return coverage execution progress as a percentage.
 
         Returns:
-            0.0 before coverage starts.
-            100.0 when all coverage waypoints are complete.
+            0.0 before a path is generated and 100.0 after all
+            waypoints have been completed.
         """
-
         total_waypoints = self.total_waypoints
 
         if total_waypoints == 0:
@@ -799,29 +811,24 @@ class CoveragePlanner:
         ) * 100.0
 
     # ------------------------------------------------------------------
-    # Coverage validation
+    # Coverage validation and estimation
     # ------------------------------------------------------------------
 
     def get_usable_area(self) -> float:
-        """
-        Return the total usable lawn area in square meters.
-        """
-
-        return (
-            self.usable_width
-            * self.usable_height
-        )
+        """Return the usable lawn area in square meters."""
+        return self.usable_width * self.usable_height
 
     def get_planned_coverage_area(self) -> float:
         """
-        Estimate the area covered by the generated mowing
-        lanes.
+        Estimate the area covered by the generated mowing lanes.
 
-        This is an estimate based on lane length multiplied
-        by cutting width. It is not a geometric union-area
+        This estimate is calculated as:
+
+            lane length × cutting width
+
+        for every generated lane. It is not a geometric union-area
         calculation.
         """
-
         lanes = self.generate_ordered_lanes()
 
         return sum(
@@ -831,10 +838,9 @@ class CoveragePlanner:
 
     def get_planned_coverage_percentage(self) -> float:
         """
-        Return the estimated percentage of usable lawn area
-        covered by the generated mowing lanes.
+        Return the estimated percentage of usable lawn covered
+        by the mowing lanes.
         """
-
         usable_area = self.get_usable_area()
 
         if usable_area <= 0.0:
@@ -852,10 +858,18 @@ class CoveragePlanner:
         minimum_percentage: float = 95.0,
     ) -> bool:
         """
-        Validate that estimated planned coverage reaches
-        the required minimum percentage.
-        """
+        Validate the estimated planned coverage against a minimum.
 
+        Args:
+            minimum_percentage: Required minimum coverage percentage.
+
+        Returns:
+            True when estimated coverage meets the requirement.
+
+        Raises:
+            ValueError: If the requested percentage is outside
+                the range 0 to 100.
+        """
         if not 0.0 <= minimum_percentage <= 100.0:
             raise ValueError(
                 "minimum_percentage must be between 0 and 100."
@@ -868,12 +882,10 @@ class CoveragePlanner:
 
     def get_lane_overlap(self) -> float:
         """
-        Estimate total overlap area between consecutive
-        mowing lanes.
+        Estimate the total overlap area between consecutive lanes.
 
-        This is a simplified rectangular-strip estimate.
+        The calculation is a simplified rectangular-strip estimate.
         """
-
         lanes = self.generate_ordered_lanes()
 
         if len(lanes) < 2:
@@ -895,10 +907,9 @@ class CoveragePlanner:
 
     def get_overlap_percentage(self) -> float:
         """
-        Return estimated overlap as a percentage of the
+        Return estimated lane overlap as a percentage of
         planned coverage area.
         """
-
         planned_area = self.get_planned_coverage_area()
 
         if planned_area <= 0.0:
@@ -916,10 +927,18 @@ class CoveragePlanner:
         maximum_percentage: float = 10.0,
     ) -> bool:
         """
-        Validate that estimated lane overlap remains within
-        the configured maximum percentage.
-        """
+        Validate estimated lane overlap against a maximum percentage.
 
+        Args:
+            maximum_percentage: Maximum allowed overlap percentage.
+
+        Returns:
+            True when estimated overlap is within the limit.
+
+        Raises:
+            ValueError: If the requested percentage is outside
+                the range 0 to 100.
+        """
         if not 0.0 <= maximum_percentage <= 100.0:
             raise ValueError(
                 "maximum_percentage must be between 0 and 100."
@@ -932,13 +951,11 @@ class CoveragePlanner:
 
     def get_lane_gap(self) -> float:
         """
-        Return the estimated gap between consecutive mowing
-        lanes.
+        Return the estimated gap between consecutive mowing lanes.
 
-        A positive value indicates that lane spacing is
-        larger than cutting width.
+        A positive value means lane spacing is greater than the
+        configured cutting width.
         """
-
         return max(
             self.config.lane_spacing
             - self.config.cutting_width,
@@ -948,9 +965,8 @@ class CoveragePlanner:
     def get_missed_area(self) -> float:
         """
         Estimate the area that may remain uncovered because
-        lane spacing is larger than cutting width.
+        lane spacing is greater than cutting width.
         """
-
         lanes = self.generate_ordered_lanes()
 
         if len(lanes) < 2:
@@ -968,10 +984,9 @@ class CoveragePlanner:
 
     def get_missed_area_percentage(self) -> float:
         """
-        Return the estimated percentage of usable lawn area
-        that may remain uncovered between mowing lanes.
+        Return the estimated missed area as a percentage of
+        usable lawn area.
         """
-
         usable_area = self.get_usable_area()
 
         if usable_area <= 0.0:
@@ -989,10 +1004,18 @@ class CoveragePlanner:
         maximum_percentage: float = 5.0,
     ) -> bool:
         """
-        Validate that estimated missed area remains within
-        the configured maximum percentage.
-        """
+        Validate estimated missed area against a maximum percentage.
 
+        Args:
+            maximum_percentage: Maximum allowed missed-area percentage.
+
+        Returns:
+            True when estimated missed area is within the limit.
+
+        Raises:
+            ValueError: If the requested percentage is outside
+                the range 0 to 100.
+        """
         if not 0.0 <= maximum_percentage <= 100.0:
             raise ValueError(
                 "maximum_percentage must be between 0 and 100."
@@ -1002,4 +1025,3 @@ class CoveragePlanner:
             self.get_missed_area_percentage()
             <= maximum_percentage
         )
-

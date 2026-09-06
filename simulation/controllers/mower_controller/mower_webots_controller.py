@@ -1,73 +1,92 @@
-import time
 import sys
+import time
 from pathlib import Path
 
 import yaml
 from controller import Robot
 
 
+# ============================================================
+# Project Path Configuration
+# ============================================================
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+SRC_ROOT = PROJECT_ROOT / "raspberry_pi" / "src"
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-
-SRC_ROOT = PROJECT_ROOT / "raspberry_pi" / "src"
 
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 
-from localization.localization_manager import LocalizationManager
+# ============================================================
+# Project Module Imports
+# ============================================================
 
-from navigation.planner import NavigationPlanner
-from navigation.navigation_types import NavigationState
-from navigation.differential_drive import DifferentialDriveController
-from navigation.obstacle_types import Obstacle, ObstacleInformation
-from navigation.geofence import Geofence
+from ai.inference.inference import InferenceEngine
+from localization.localization_manager import LocalizationManager
+from mission.mission_manager import MissionManager
 from navigation.coverage_planner import (
     CoverageConfig,
     CoverageOrientation,
     CoveragePlanner,
 )
-
+from navigation.differential_drive import DifferentialDriveController
+from navigation.geofence import Geofence
+from navigation.navigation_types import NavigationState
+from navigation.obstacle_types import Obstacle, ObstacleInformation
+from navigation.planner import NavigationPlanner
 from safety.safety_manager import SafetyManager
-
 from webots_camera import WebotsCameraAdapter
-from ai.inference.inference import InferenceEngine
 
-from mission.mission_manager import MissionManager
 
+# ============================================================
+# Main Simulation Controller
+# ============================================================
 
 def run_simulation():
+    """Initialize the Webots robot and run the mower simulation."""
+
     robot = Robot()
 
-    # --------------------------------------------------
-    # Load configuration
-    # --------------------------------------------------
+    # ========================================================
+    # Configuration
+    # ========================================================
+
     project_root = Path(__file__).resolve().parents[3]
-    config_path = project_root / "config" / "development" / "config.yaml"
+    config_path = (
+        project_root
+        / "config"
+        / "development"
+        / "config.yaml"
+    )
 
     with config_path.open("r", encoding="utf-8") as config_file:
         config = yaml.safe_load(config_file)
 
-    # --------------------------------------------------
+    # ========================================================
     # Safety Configuration
-    # --------------------------------------------------
+    # ========================================================
+
+    safety_config = config["safety"]
+
     ai_stop_classes = set(
-        config["safety"]["ai_stop_classes"]
+        safety_config["ai_stop_classes"]
     )
 
-    obstacle_distance_threshold = config["safety"][
-        "obstacle_distance_threshold"
-    ]
+    obstacle_distance_threshold = (
+        safety_config["obstacle_distance_threshold"]
+    )
 
-    ai_confidence_threshold = config["safety"][
-        "ai_confidence_threshold"
-    ]
+    ai_confidence_threshold = (
+        safety_config["ai_confidence_threshold"]
+    )
 
-    # --------------------------------------------------
-    # Geofence Configuration
-    # --------------------------------------------------
+    # ========================================================
+    # Geofence
+    # ========================================================
+
     geofence_config = config["geofence"]
 
     geofence = Geofence(
@@ -77,78 +96,91 @@ def run_simulation():
         max_y=geofence_config["max_y"],
     )
 
-    # --------------------------------------------------
+    # ========================================================
     # Safety Manager
-    # --------------------------------------------------
+    # ========================================================
+
     safety_manager = SafetyManager(
         ai_stop_classes,
         obstacle_distance_threshold,
         geofence=geofence,
     )
 
+    # ========================================================
+    # Webots Timestep
+    # ========================================================
+
     timestep = int(robot.getBasicTimeStep())
 
-    # --------------------------------------------------
+    # ========================================================
     # IMU
-    # --------------------------------------------------
+    # ========================================================
+
     imu = robot.getDevice("imu")
 
-    # --------------------------------------------------
+    # ========================================================
     # GPS
-    # --------------------------------------------------
+    # ========================================================
+
     gps = robot.getDevice("gps")
 
-    # --------------------------------------------------
-    # AI Inference
-    # --------------------------------------------------
+    # ========================================================
+    # AI Inference Engine
+    # ========================================================
+
     inference_engine = InferenceEngine(
         confidence_threshold=ai_confidence_threshold
     )
 
-    # --------------------------------------------------
-    # AI Safety State
-    # --------------------------------------------------
+    # Stores the current AI safety-stop state.
     ai_safety_stop = False
 
-    # --------------------------------------------------
-    # Motors
-    # --------------------------------------------------
+    # ========================================================
+    # Drive Motors
+    # ========================================================
+
     left_motor = robot.getDevice("left_wheel_motor")
     right_motor = robot.getDevice("right_wheel_motor")
 
+    # Use velocity control instead of position control.
     left_motor.setPosition(float("inf"))
     right_motor.setPosition(float("inf"))
 
+    # Keep the mower stationary during initialization.
     left_motor.setVelocity(0.0)
     right_motor.setVelocity(0.0)
 
-    # --------------------------------------------------
+    # ========================================================
     # Front Distance Sensor
-    # --------------------------------------------------
+    # ========================================================
+
     ds_front = robot.getDevice("ds_front")
     ds_front.enable(timestep)
 
-    # --------------------------------------------------
+    # ========================================================
     # Camera
-    # --------------------------------------------------
+    # ========================================================
+
     camera = robot.getDevice("camera")
     camera.enable(timestep)
 
     camera_adapter = WebotsCameraAdapter(camera)
     camera_adapter.initialize(timestep)
 
-    # --------------------------------------------------
+    # ========================================================
     # Wheel Encoders
-    # --------------------------------------------------
+    # ========================================================
+
     left_encoder = robot.getDevice("left_wheel_encoder")
     right_encoder = robot.getDevice("right_wheel_encoder")
 
     left_encoder.enable(timestep)
     right_encoder.enable(timestep)
 
-    # --------------------------------------------------
-    # Localization
-    # --------------------------------------------------
+    # ========================================================
+    # Localization Manager
+    # ========================================================
+
     gps_origin = config["localization"]["gps_origin"]
 
     localization_manager = LocalizationManager(
@@ -164,17 +196,19 @@ def run_simulation():
         timestep=timestep,
     )
 
-    # --------------------------------------------------
+    # ========================================================
     # Navigation Planner
-    # --------------------------------------------------
+    # ========================================================
+
     navigation_planner = NavigationPlanner(
         waypoint_tolerance=0.15,
         geofence=geofence,
     )
 
-    # --------------------------------------------------
+    # ========================================================
     # Coverage Planner
-    # --------------------------------------------------
+    # ========================================================
+
     coverage_config = config["coverage"]
 
     coverage_planner = CoveragePlanner(
@@ -193,47 +227,53 @@ def run_simulation():
         ),
     )
 
-    # --------------------------------------------------
+    # ========================================================
     # Mission Manager
-    # --------------------------------------------------
+    # ========================================================
+
     mission_manager = MissionManager(
         coverage_planner=coverage_planner,
         navigation_planner=navigation_planner,
     )
 
-    # --------------------------------------------------
+    # ========================================================
     # Differential Drive Controller
-    # --------------------------------------------------
+    # ========================================================
+
     drive_controller = DifferentialDriveController(
         wheel_radius=0.08,
         wheel_track=0.44,
     )
 
-    # --------------------------------------------------
-    # Prepare Mission
-    # --------------------------------------------------
+    # ========================================================
+    # Mission Initialization
+    # ========================================================
+
+    # Generate the coverage path and prepare the mission.
     mission_manager.prepare()
 
-    # --------------------------------------------------
-    # Start Mission
-    # --------------------------------------------------
+    # Start navigation from the first coverage waypoint.
     mission_manager.start()
 
-    # --------------------------------------------------
-    # Main Simulation Loop
-    # --------------------------------------------------
+    # ========================================================
+    # Main Webots Simulation Loop
+    # ========================================================
+
     while robot.step(timestep) != -1:
         loop_start = time.perf_counter()
 
-        # --------------------------------------------------
+        # ====================================================
         # Read Front Distance Sensor
-        # --------------------------------------------------
+        # ====================================================
+
         distance = ds_front.getValue() / 1000.0
 
         obstacle_detected = distance < 0.8
 
         critical_obstacle = (
-            safety_manager.should_stop_for_obstacle(distance)
+            safety_manager.should_stop_for_obstacle(
+                distance
+            )
         )
 
         obstacle_information = ObstacleInformation(
@@ -244,15 +284,17 @@ def run_simulation():
             else ()
         )
 
-        # --------------------------------------------------
-        # Read Wheel Encoder Positions
-        # --------------------------------------------------
+        # ====================================================
+        # Read Wheel Encoders
+        # ====================================================
+
         left_encoder_position = left_encoder.getValue()
         right_encoder_position = right_encoder.getValue()
 
-        # --------------------------------------------------
+        # ====================================================
         # Localization Update
-        # --------------------------------------------------
+        # ====================================================
+
         localization_start = time.perf_counter()
 
         pose = localization_manager.update(
@@ -264,6 +306,10 @@ def run_simulation():
             time.perf_counter() - localization_start
         )
 
+        # ====================================================
+        # Geofence Safety Check
+        # ====================================================
+
         geofence_safety_stop = (
             safety_manager.should_stop_for_geofence(
                 pose
@@ -274,14 +320,16 @@ def run_simulation():
             localization_manager.is_ready()
         )
 
-        # --------------------------------------------------
-        # Camera Frame
-        # --------------------------------------------------
+        # ====================================================
+        # Camera Frame Acquisition
+        # ====================================================
+
         frame = camera_adapter.get_frame()
 
-        # --------------------------------------------------
+        # ====================================================
         # AI Object Detection
-        # --------------------------------------------------
+        # ====================================================
+
         detections = []
 
         ai_start = time.perf_counter()
@@ -291,18 +339,20 @@ def run_simulation():
 
         ai_time = time.perf_counter() - ai_start
 
-        # --------------------------------------------------
+        # ====================================================
         # AI Safety Check
-        # --------------------------------------------------
+        # ====================================================
+
         ai_safety_stop = (
             safety_manager.should_emergency_stop(
                 detections
             )
         )
 
-        # --------------------------------------------------
+        # ====================================================
         # Navigation Update
-        # --------------------------------------------------
+        # ====================================================
+
         navigation_start = time.perf_counter()
 
         (
@@ -319,9 +369,10 @@ def run_simulation():
             time.perf_counter() - navigation_start
         )
 
-        # --------------------------------------------------
+        # ====================================================
         # Mission Update
-        # --------------------------------------------------
+        # ====================================================
+
         mission_start = time.perf_counter()
 
         mission_manager.update(
@@ -337,9 +388,10 @@ def run_simulation():
             time.perf_counter() - mission_start
         )
 
-        # --------------------------------------------------
+        # ====================================================
         # Differential Drive Calculation
-        # --------------------------------------------------
+        # ====================================================
+
         left_wheel_velocity, right_wheel_velocity = (
             drive_controller.calculate_wheel_velocities(
                 motion_command.linear_velocity,
@@ -347,9 +399,10 @@ def run_simulation():
             )
         )
 
-        # --------------------------------------------------
-        # Final Safety / Movement Gate
-        # --------------------------------------------------
+        # ====================================================
+        # Final Safety and Movement Gate
+        # ====================================================
+
         if not localization_ready:
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)
@@ -374,9 +427,10 @@ def run_simulation():
             left_motor.setVelocity(left_wheel_velocity)
             right_motor.setVelocity(right_wheel_velocity)
 
-        # --------------------------------------------------
+        # ====================================================
         # Performance Baseline Measurement
-        # --------------------------------------------------
+        # ====================================================
+
         loop_time = time.perf_counter() - loop_start
 
         print(
@@ -389,6 +443,9 @@ def run_simulation():
         )
 
 
+# ============================================================
+# Controller Entry Point
+# ============================================================
+
 if __name__ == "__main__":
     run_simulation()
-    

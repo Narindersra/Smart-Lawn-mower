@@ -1,3 +1,10 @@
+"""
+Mission-level lifecycle management for the lawn mower.
+
+This module coordinates the coverage planner and navigation planner
+during an autonomous mowing mission.
+"""
+
 from enum import Enum
 
 from navigation.coverage_planner import CoveragePlanner
@@ -6,6 +13,10 @@ from navigation.planner import NavigationPlanner
 
 
 class MissionState(str, Enum):
+    """
+    Represents the current lifecycle state of a mowing mission.
+    """
+
     IDLE = "idle"
     READY = "ready"
     RUNNING = "running"
@@ -18,17 +29,18 @@ class MissionManager:
     """
     Coordinates the mission-level lifecycle.
 
-    CoveragePlanner owns:
+    CoveragePlanner is responsible for:
         - coverage path generation
         - coverage waypoint progression
         - coverage progress
 
-    NavigationPlanner owns:
+    NavigationPlanner is responsible for:
         - navigation toward the current waypoint
         - obstacle handling
         - navigation state
 
-    MissionManager coordinates both subsystems.
+    MissionManager coordinates both subsystems and controls
+    the overall mission state.
     """
 
     def __init__(
@@ -36,6 +48,22 @@ class MissionManager:
         coverage_planner: CoveragePlanner,
         navigation_planner: NavigationPlanner,
     ) -> None:
+        """
+        Initialize the mission manager.
+
+        Args:
+            coverage_planner:
+                Planner responsible for generating and progressing
+                through the coverage path.
+
+            navigation_planner:
+                Planner responsible for navigating to the current
+                coverage waypoint.
+
+        Raises:
+            ValueError:
+                If either planner is not provided.
+        """
         if coverage_planner is None:
             raise ValueError(
                 "MissionManager requires a valid CoveragePlanner."
@@ -51,22 +79,22 @@ class MissionManager:
 
         self._state = MissionState.IDLE
 
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
     # Mission State
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
 
     @property
     def state(self) -> MissionState:
         """Return the current mission state."""
         return self._state
 
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
     # Coverage Information
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
 
     @property
     def coverage_path(self) -> Path | None:
-        """Return the generated coverage path."""
+        """Return the currently generated coverage path."""
         return self.coverage_planner.coverage_path
 
     @property
@@ -89,13 +117,15 @@ class MissionManager:
         """Return coverage progress as a percentage."""
         return self.coverage_planner.progress
 
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
     # Mission Preparation
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
 
     def prepare(self) -> Path:
         """
         Generate and prepare the complete coverage mission.
+
+        The mission can only be prepared from IDLE or STOPPED.
         """
         if self._state not in (
             MissionState.IDLE,
@@ -107,6 +137,7 @@ class MissionManager:
 
         path = self.coverage_planner.start_coverage()
 
+        # Ensure no previous navigation target remains active.
         self.navigation_planner.clear_waypoint()
 
         if not path.waypoints:
@@ -117,13 +148,16 @@ class MissionManager:
 
         return path
 
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
     # Mission Start
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
 
     def start(self) -> None:
         """
-        Start the prepared mission.
+        Start a prepared mission.
+
+        The first coverage waypoint becomes the active navigation
+        target.
         """
         if self._state != MissionState.READY:
             raise RuntimeError(
@@ -144,14 +178,16 @@ class MissionManager:
 
         self._state = MissionState.RUNNING
 
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
     # Mission Pause
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
 
     def pause(self) -> None:
         """
-        Pause the current mission while preserving
-        the current coverage waypoint.
+        Pause the current mission.
+
+        The current coverage waypoint is preserved so that the
+        mission can resume from the same coverage position.
         """
         if self._state != MissionState.RUNNING:
             return
@@ -161,13 +197,13 @@ class MissionManager:
 
         self._state = MissionState.PAUSED
 
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
     # Mission Resume
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
 
     def resume(self) -> None:
         """
-        Resume the mission from the current coverage waypoint.
+        Resume a paused mission from the current coverage waypoint.
         """
         if self._state != MissionState.PAUSED:
             return
@@ -188,13 +224,16 @@ class MissionManager:
 
         self._state = MissionState.RUNNING
 
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
     # Mission Stop
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
 
     def stop(self) -> None:
         """
         Stop the current mission.
+
+        Stopping clears the active navigation target and changes
+        the mission state to STOPPED.
         """
         if self._state not in (
             MissionState.RUNNING,
@@ -207,9 +246,9 @@ class MissionManager:
 
         self._state = MissionState.STOPPED
 
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
     # Mission Update
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
 
     def update(
         self,
@@ -220,57 +259,51 @@ class MissionManager:
         Synchronize mission progress with navigation progress.
 
         A coverage waypoint is advanced only when:
-            1. Mission is RUNNING
-            2. No safety stop is active
-            3. Navigation reports GOAL_REACHED
-        """
 
+            1. The mission is RUNNING.
+            2. No safety stop is active.
+            3. Navigation reports GOAL_REACHED.
+
+        Args:
+            navigation_state:
+                Current state reported by the navigation system.
+
+            safety_stop:
+                Indicates whether a safety condition is currently
+                preventing mission progression.
+
+        Returns:
+            The current mission state.
+        """
         if self._state != MissionState.RUNNING:
             return self._state
 
-        # --------------------------------------------------
-        # Safety Protection
-        # --------------------------------------------------
-
+        # Safety conditions prevent mission progression.
         if safety_stop:
             return self._state
 
-        # --------------------------------------------------
-        # Emergency Navigation State
-        # --------------------------------------------------
-
+        # Emergency navigation state prevents mission progression.
         if navigation_state == NavigationState.EMERGENCY_STOP:
             return self._state
 
-        # --------------------------------------------------
-        # Wait Until Current Waypoint Is Reached
-        # --------------------------------------------------
-
+        # Wait until the active waypoint has been reached.
         if navigation_state != NavigationState.GOAL_REACHED:
             return self._state
 
-        # --------------------------------------------------
-        # Advance Coverage Waypoint
-        # --------------------------------------------------
-
+        # Advance to the next coverage waypoint.
         next_waypoint = (
             self.coverage_planner.advance_waypoint()
         )
 
-        # --------------------------------------------------
-        # Coverage Complete
-        # --------------------------------------------------
-
+        # No next waypoint means the complete coverage mission
+        # has finished.
         if next_waypoint is None:
             self.navigation_planner.clear_waypoint()
             self._state = MissionState.COMPLETED
 
             return self._state
 
-        # --------------------------------------------------
-        # Navigate To Next Coverage Waypoint
-        # --------------------------------------------------
-
+        # Assign the next coverage waypoint to navigation.
         self.navigation_planner.set_waypoint(
             next_waypoint
         )
