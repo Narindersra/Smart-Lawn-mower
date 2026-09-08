@@ -403,6 +403,29 @@ def run_simulation():
         # Final Safety and Movement Gate
         # ====================================================
 
+        # ====================================================
+        # DEBUG: Identify Why Robot Stops
+        # ====================================================
+
+        if (
+            not localization_ready
+            or ai_safety_stop
+            or geofence_safety_stop
+            or critical_obstacle
+            or navigation_state == NavigationState.GOAL_REACHED
+            or navigation_state == NavigationState.EMERGENCY_STOP
+        ):
+            print(
+                "[STOP DEBUG] "
+                f"localization_ready={localization_ready}, "
+                f"ai_safety_stop={ai_safety_stop}, "
+                f"geofence_safety_stop={geofence_safety_stop}, "
+                f"critical_obstacle={critical_obstacle}, "
+                f"navigation_state={navigation_state}, "
+                f"distance={distance:.3f}, "
+                f"pose={pose}"
+            )
+
         if not localization_ready:
             left_motor.setVelocity(0.0)
             right_motor.setVelocity(0.0)

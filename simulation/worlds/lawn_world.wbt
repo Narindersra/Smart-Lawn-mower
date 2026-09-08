@@ -4,29 +4,40 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/RectangleArena.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/WoodenBox.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/Grass.proto"
 EXTERNPROTO "../protos/LawnMower.proto"
 
 WorldInfo {
   basicTimeStep 16
 }
+
 Viewpoint {
   orientation -0.5770915080312369 0.5734959228517877 0.5814359963320204 2.0937055312208526
   position 0.014000677916610943 0 3.0207965088880626
 }
+
 TexturedBackground {
 }
+
 TexturedBackgroundLight {
 }
+
 RectangleArena {
-  floorTileSize 10 10
+  floorSize 20 20
+  floorTileSize 2 2
+  floorAppearance Grass {
+  }
   wallHeight 0.5
 }
+
 WoodenBox {
   translation 1.5 0 0.3
 }
+
 WoodenBox {
   translation -2 2 0.3
 }
+
 LawnMower {
   hidden position_0_0 -2917.224730550086
   hidden position_0_1 4631.981269475955
@@ -36,8 +47,8 @@ LawnMower {
   hidden linearVelocity_1 -0.06768108684661248 0.06376253004287107 0.005122325106094247
   hidden angularVelocity_1 -2.0249177233053652 -2.1503276163224827 0.3117475405214549
   hidden rotation_2 -0.6910233416554056 -0.5111187836924173 0.5111206611399901 4.350941058927317
-  hidden linearVelocity_2 -0.16767349940610074 0.15716562598496986 0.005054875602546791
+  hidden linearVelocity_2 -0.16767349940610074 0.15716562598496986 0.005054875106094247
   hidden angularVelocity_2 -2.0204232693892124 -2.1545679700828786 0.3124794853099234
-  translation 0.09138861273438834 -0.01963826879129612 0.027006262409956197
-  rotation -0.006312912523855028 0.0025024663019787598 -0.9999769421331042 -2.391927069572916
+  translation 0.20 0.20 0.10
+  rotation 0 0 1 0
 }
