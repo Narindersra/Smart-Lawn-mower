@@ -4,7 +4,7 @@ PROTO LawnMower [
   field SFVec3f    translation 0 0 0.1
   field SFRotation rotation    0 0 1 0
   field SFString   name        "LawnMower"
-  field SFString   controller  "mower_webots_controller"
+  field SFString   controller  "mower_controller"
 ]
 {
   Robot {
@@ -12,8 +12,11 @@ PROTO LawnMower [
     rotation IS rotation
     name IS name
     controller IS controller
+
     children [
-      # Main Robot Body Chassis (Blue Box)
+      # ----------------------------------------------------------------------
+      # Main Robot Body Chassis
+      # ----------------------------------------------------------------------
       Pose {
         translation 0 0 0.05
         children [
@@ -28,40 +31,67 @@ PROTO LawnMower [
           }
         ]
       }
+
+      # ----------------------------------------------------------------------
       # Left Drive Wheel
+      #
+      # Cylinder uses its default Y-axis as its rotation axis.
+      # The HingeJoint also uses the Y-axis, so no additional wheel
+      # rotation is required.
+      # ----------------------------------------------------------------------
       HingeJoint {
         jointParameters HingeJointParameters {
           anchor 0.1 0.22 0.05
           axis 0 1 0
         }
+
         device [
-            RotationalMotor {
-              name "left_wheel_motor"
-            }
-            PositionSensor {
-              name "left_wheel_encoder"
-            }
+          RotationalMotor {
+            name "left_wheel_motor"
+          }
+          PositionSensor {
+            name "left_wheel_encoder"
+          }
         ]
+
         endPoint Solid {
           name "left_wheel"
           translation 0.1 0.22 0.05
-          rotation 1 0 0 1.5708
+
           children [
             Shape {
-              appearance PBRAppearance { baseColor 0.1 0.1 0.1 }
-              geometry Cylinder { height 0.04 radius 0.08 }
+              appearance PBRAppearance {
+                baseColor 0.1 0.1 0.1
+              }
+              geometry Cylinder {
+                height 0.04
+                radius 0.08
+              }
             }
           ]
-          boundingObject Cylinder { height 0.04 radius 0.08 }
+
+          boundingObject Cylinder {
+            height 0.04
+            radius 0.08
+          }
+
           physics Physics {}
         }
       }
+
+      # ----------------------------------------------------------------------
       # Right Drive Wheel
+      #
+      # Cylinder uses its default Y-axis as its rotation axis.
+      # The HingeJoint also uses the Y-axis, so no additional wheel
+      # rotation is required.
+      # ----------------------------------------------------------------------
       HingeJoint {
         jointParameters HingeJointParameters {
           anchor 0.1 -0.22 0.05
           axis 0 1 0
         }
+
         device [
           RotationalMotor {
             name "right_wheel_motor"
@@ -70,38 +100,66 @@ PROTO LawnMower [
             name "right_wheel_encoder"
           }
         ]
+
         endPoint Solid {
           name "right_wheel"
           translation 0.1 -0.22 0.05
-          rotation 1 0 0 1.5708
+
           children [
             Shape {
-              appearance PBRAppearance { baseColor 0.1 0.1 0.1 }
-              geometry Cylinder { height 0.04 radius 0.08 }
+              appearance PBRAppearance {
+                baseColor 0.1 0.1 0.1
+              }
+              geometry Cylinder {
+                height 0.04
+                radius 0.08
+              }
             }
           ]
-          boundingObject Cylinder { height 0.04 radius 0.08 }
+
+          boundingObject Cylinder {
+            height 0.04
+            radius 0.08
+          }
+
           physics Physics {}
         }
       }
-      # Rear Caster Wheel (Balance Support)
+
+      # ----------------------------------------------------------------------
+      # Rear Caster Wheel
+      # ----------------------------------------------------------------------
       Pose {
         translation -0.2 0 0.01
+
         children [
           Shape {
-            appearance PBRAppearance { baseColor 0.2 0.2 0.2 }
-            geometry Sphere { radius 0.04 }
+            appearance PBRAppearance {
+              baseColor 0.2 0.2 0.2
+            }
+            geometry Sphere {
+              radius 0.04
+            }
           }
         ]
       }
-      # Ultrasonic Distance Sensor (Front Bumper)
+
+      # ----------------------------------------------------------------------
+      # Ultrasonic Distance Sensor - Front
+      # ----------------------------------------------------------------------
       DistanceSensor {
         translation 0.26 0 0.08
         rotation 0 0 1 0
         name "ds_front"
-        lookupTable [ 0 0 0, 2 2000 0 ]
+        lookupTable [
+          0 0 0
+          2 2000 0
+        ]
       }
-      # AI Vision Camera Sensor (Front Center)
+
+      # ----------------------------------------------------------------------
+      # AI Vision Camera - Front Center
+      # ----------------------------------------------------------------------
       Camera {
         translation 0.25 0 0.12
         rotation 0 0 1 0
@@ -109,22 +167,40 @@ PROTO LawnMower [
         width 640
         height 480
       }
+
+      # ----------------------------------------------------------------------
+      # Inertial Measurement Unit
+      # ----------------------------------------------------------------------
       InertialUnit {
         translation 0 0 0.12
         name "imu"
       }
+
+      # ----------------------------------------------------------------------
+      # GPS
+      # ----------------------------------------------------------------------
       GPS {
         translation 0 0 0.12
         name "gps"
       }
     ]
-    # Physics Collision Box
+
+    # ------------------------------------------------------------------------
+    # Main Robot Collision Body
+    # ------------------------------------------------------------------------
     boundingObject Pose {
       translation 0 0 0.05
+
       children [
-        Box { size 0.5 0.4 0.15 }
+        Box {
+          size 0.5 0.4 0.15
+        }
       ]
     }
+
+    # ------------------------------------------------------------------------
+    # Robot Physics
+    # ------------------------------------------------------------------------
     physics Physics {
       density -1
       mass 10
